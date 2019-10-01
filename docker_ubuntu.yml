@@ -1,0 +1,80 @@
+###########################################################################################################################
+# DO Community Playbooks
+# Playbook: Installing Docker and Creating Containers on Ubuntu 18.04
+# Based on: https://www.digitalocean.com/community/tutorials/how-to-install-and-use-docker-on-ubuntu-18-04
+# Guide: https://www.digitalocean.com/community/tutorials/how-to-use-ansible-to-install-and-set-up-docker-on-ubuntu-18-04
+###########################################################################################################################
+
+---
+- hosts: all
+  become: true
+  vars:
+    create_containers: 1
+    drone_server_container_name: drone-server
+    drone_server_container_image: drone/drone:0.8
+    drone_agent_container_name: drone-agent
+    drone_agent_container_image: drone/agent:0.8
+
+  tasks:
+    - name: Install aptitude using apt
+      apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
+
+    - name: Install required system packages
+      apt: name={{ item }} state=latest update_cache=yes
+      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common', 'python-pip', 'virtualenv', 'python-setuptools']
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt: update_cache=yes name=docker-ce state=latest
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+
+    - name: Copy dronerc
+      copy:
+        src: dronerc
+        dest: /home/ubuntu/dronerc
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Pull drone/drone image
+      docker_image:
+        name: "{{ drone_server_container_image }}"
+        source: pull
+
+    - name: Pull drone/agent image
+      docker_image:
+        name: "{{ drone_agent_container_image }}"
+        source: pull
+
+    - name: Create drone server containers
+      docker_container:
+        name: "{{ drone_server_container_name }}"
+        image: "{{ drone_server_container_image }}"
+        restart_policy: always
+        env_file: /home/ubuntu/dronerc
+        ports:
+          - "80:8000"
+        volumes:
+          - /var/lib/drone/:/var/lib/drone/
+
+    - name: Create drone agent containers
+      docker_container:
+        name: "{{ drone_agent_container_name }}"
+        image: "{{ drone_agent_container_image }}"
+        restart_policy: always
+        env_file: /home/ubuntu/dronerc
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+        ports:
+          - "3000:3000"

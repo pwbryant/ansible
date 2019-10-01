@@ -1,0 +1,4 @@
+hosts
+dronerc
+group_vars
+ansible.cfg
